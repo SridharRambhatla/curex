@@ -14,6 +14,10 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from config import settings, AGENT_MODEL_CONFIG
 from state.schemas import AgentState
 from utils.helpers import strip_markdown_json
+from logging_system import AgentLogger, get_log_writer, get_log_config
+
+# Initialize Agent Logger with global log writer
+_agent_logger = AgentLogger("plot_builder_agent", log_writer=get_log_writer(), config=get_log_config())
 
 
 PLOT_BUILDER_SYSTEM_PROMPT = """You are the Plot-Builder Agent for Sidequest, the core creative engine.
@@ -64,6 +68,7 @@ def get_plot_builder_model() -> ChatVertexAI:
     )
 
 
+@_agent_logger.log_execution
 async def run_plot_builder(state: AgentState) -> AgentState:
     """
     Execute the Plot-Builder Agent.

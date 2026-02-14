@@ -13,6 +13,10 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from config import settings, AGENT_MODEL_CONFIG
 from state.schemas import AgentState
 from utils.helpers import strip_markdown_json
+from logging_system import AgentLogger, get_log_writer, get_log_config
+
+# Initialize Agent Logger with global log writer
+_agent_logger = AgentLogger("budget_agent", log_writer=get_log_writer(), config=get_log_config())
 
 
 BUDGET_SYSTEM_PROMPT = """You are the Budget Optimizer Agent for Sidequest.
@@ -61,6 +65,7 @@ def get_budget_model() -> ChatVertexAI:
     )
 
 
+@_agent_logger.log_execution
 async def run_budget_optimizer(state: AgentState) -> AgentState:
     """
     Execute the Budget Optimizer Agent.

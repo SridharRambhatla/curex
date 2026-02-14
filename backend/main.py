@@ -12,11 +12,12 @@ from contextlib import asynccontextmanager
 from config import settings
 from state.schemas import ItineraryRequest, ItineraryResponse
 from agents.coordinator import run_workflow
+from logging_system import start_global_logger, stop_global_logger, get_log_config
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize Vertex AI on startup."""
+    """Initialize Vertex AI and logging system on startup."""
     import google.cloud.aiplatform as aiplatform
 
     if settings.google_cloud_project:
@@ -29,7 +30,18 @@ async def lifespan(app: FastAPI):
     else:
         print("⚠️  GOOGLE_CLOUD_PROJECT not set — Vertex AI calls will fail. "
               "Set it in .env for full functionality.")
+    
+    # Initialize logging system
+    await start_global_logger()
+    log_config = get_log_config()
+    print(f"✅ Agent logging system initialized: level={log_config.log_level}, "
+          f"dir={log_config.log_dir}")
+    
     yield
+    
+    # Cleanup logging system
+    await stop_global_logger()
+    print("✅ Agent logging system stopped")
 
 
 app = FastAPI(

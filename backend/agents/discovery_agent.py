@@ -5,6 +5,7 @@ from typing import Dict, Any, List
 from dotenv import load_dotenv
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from logging_system import AgentLogger, get_log_writer, get_log_config
 
 # Load environment variables
 load_dotenv()
@@ -12,6 +13,9 @@ load_dotenv()
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Initialize Agent Logger with global log writer
+_agent_logger = AgentLogger("discovery_agent", log_writer=get_log_writer(), config=get_log_config())
 
 # --- 1. SYSTEM PROMPT ---
 DISCOVERY_SYSTEM_PROMPT = """You are the Discovery Agent for Sidequest, a plot-first experience discovery platform.
@@ -59,6 +63,7 @@ safety_settings = {
 }
 
 # --- 3. AGENT FUNCTION ---
+@_agent_logger.log_execution
 def run_discovery_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     Executes the Discovery Agent.
