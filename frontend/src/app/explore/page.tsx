@@ -10,6 +10,9 @@ import {
   X,
   RefreshCw,
   AlertCircle,
+  Clock,
+  Wand2,
+  Zap,
 } from 'lucide-react';
 import {
   DiscoveryCard,
@@ -44,17 +47,39 @@ export default function ExplorePage() {
   const [activeQuickFilters, setActiveQuickFilters] = useState<string[]>([]);
   const [selectedTimeFilter, setSelectedTimeFilter] = useState<string | null>(null);
   
-  // Fetch experiences from API with fallback to sample data
+  // Fetch experiences from API with fallback to sample data and auto-refresh
+  // Progressive loading: shows curated data instantly, then enriches with AI-discovered experiences
   const { 
     experiences: allExperiences, 
     isLoading, 
+    isRefreshing,
+    isEnriching,
     error, 
     isFallback, 
+    lastRefreshed,
+    source,
+    curatedCount,
+    agentCount,
     refetch 
   } = useExperiences({
     fetchOnMount: true,
     useFallback: true,
+    autoRefresh: true,
+    refreshInterval: 60 * 1000, // Refresh every 60 seconds
+    progressiveLoad: true, // Enable two-phase loading
   });
+
+  // Format last refreshed time
+  const formatLastRefreshed = (date: Date | null): string => {
+    if (!date) return '';
+    const now = new Date();
+    const diffSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    if (diffSeconds < 10) return 'just now';
+    if (diffSeconds < 60) return `${diffSeconds}s ago`;
+    if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)}m ago`;
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
   // Helper to determine time of day for an experience
   const getTimeOfDay = (exp: DiscoveryExperience): string[] => {
@@ -266,28 +291,62 @@ export default function ExplorePage() {
 
         {/* Status indicators */}
         <div className="flex items-center justify-between mb-4">
-          <p className="text-sm text-muted-foreground">
-            {isLoading 
-              ? 'Discovering experiences...' 
-              : `${filteredExperiences.length} experience${filteredExperiences.length !== 1 ? 's' : ''}`
-            }
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-muted-foreground">
+              {isLoading 
+                ? 'Loading curated experiences...' 
+                : `${filteredExperiences.length} experience${filteredExperiences.length !== 1 ? 's' : ''}`
+              }
+            </p>
+            {lastRefreshed && !isLoading && (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Clock className="h-3 w-3" />
+                Updated {formatLastRefreshed(lastRefreshed)}
+              </span>
+            )}
+            {/* Source breakdown - show when we have data */}
+            {!isLoading && source === 'hybrid' && (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                ({curatedCount} curated + {agentCount} AI-discovered)
+              </span>
+            )}
+          </div>
           
           <div className="flex items-center gap-2">
             {isFallback && !isLoading && (
-              <span className="flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-full">
+              <span className="flex items-center gap-1 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/50 px-2 py-1 rounded-full">
                 <AlertCircle className="h-3 w-3" />
                 Using cached data
+              </span>
+            )}
+            {/* AI Enriching indicator - shows while agent discovers more experiences */}
+            {isEnriching && (
+              <span className="flex items-center gap-1.5 text-xs text-violet-600 bg-violet-50 dark:bg-violet-950/50 px-2.5 py-1 rounded-full animate-pulse">
+                <Wand2 className="h-3 w-3 animate-bounce" />
+                AI discovering more...
+              </span>
+            )}
+            {isRefreshing && !isEnriching && (
+              <span className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 dark:bg-blue-950/50 px-2 py-1 rounded-full">
+                <RefreshCw className="h-3 w-3 animate-spin" />
+                Refreshing...
+              </span>
+            )}
+            {/* Show hybrid badge when enriched with AI */}
+            {!isLoading && !isEnriching && source === 'hybrid' && agentCount > 0 && (
+              <span className="flex items-center gap-1 text-xs text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-1 rounded-full">
+                <Zap className="h-3 w-3" />
+                AI-enriched
               </span>
             )}
             <Button
               variant="ghost"
               size="sm"
               onClick={() => refetch()}
-              disabled={isLoading}
+              disabled={isLoading || isRefreshing || isEnriching}
               className="text-muted-foreground"
             >
-              <RefreshCw className={cn("h-4 w-4 mr-1", isLoading && "animate-spin")} />
+              <RefreshCw className={cn("h-4 w-4 mr-1", (isLoading || isRefreshing || isEnriching) && "animate-spin")} />
               Refresh
             </Button>
           </div>

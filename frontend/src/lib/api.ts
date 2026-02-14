@@ -18,12 +18,20 @@ export interface DiscoverRequest {
   time_of_day?: 'morning' | 'afternoon' | 'evening' | 'night';
   solo_friendly_only?: boolean;
   limit?: number;
+  /** If true, return curated data only (instant). If false, combine curated + agent-generated. */
+  fast_mode?: boolean;
 }
 
 export interface DiscoverResponse {
   experiences: DiscoveryExperience[];
   total_count: number;
   filters_applied: Record<string, unknown>;
+  /** Number of curated experiences in response */
+  curated_count: number;
+  /** Number of agent-generated experiences in response */
+  agent_count: number;
+  /** Source: 'curated', 'agent', or 'hybrid' */
+  source: 'curated' | 'agent' | 'hybrid';
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -44,6 +52,8 @@ export function formStateToRequest(formState: InputFormState): ItineraryRequest 
     crowd_preference: formState.crowdPreference,
     start_date: formState.startDate,
     end_date: formState.endDate,
+    time_available_hours: formState.timeAvailableHours,
+    start_time: formState.startTime,
   };
 }
 
@@ -143,6 +153,9 @@ export const defaultFormState: InputFormState = {
 /**
  * Discover experiences for the explore page
  * Calls the backend Discovery Agent to find experiences based on filters
+ * 
+ * @param request - Discovery request parameters
+ * @param request.fast_mode - If true, returns curated data only (instant). If false, combines curated + agent-generated.
  */
 export async function discoverExperiences(
   request: DiscoverRequest = {}
@@ -160,7 +173,8 @@ export async function discoverExperiences(
       budget_max: request.budget_max ?? 10000,
       time_of_day: request.time_of_day || null,
       solo_friendly_only: request.solo_friendly_only ?? false,
-      limit: request.limit ?? 12,
+      limit: request.limit ?? 25,
+      fast_mode: request.fast_mode ?? false,
     }),
   });
 

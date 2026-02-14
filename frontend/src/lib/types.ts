@@ -19,6 +19,10 @@ export interface ItineraryRequest {
   crowd_preference?: 'crowded' | 'relatively_niche' | 'super_niche';
   start_date?: string;
   end_date?: string;
+  /** Total hours available for the itinerary (e.g., 4, 6, 8) */
+  time_available_hours?: number;
+  /** Preferred start time (HH:MM format, e.g., '14:00' for 2 PM) */
+  start_time?: string;
 }
 
 // ============================================
@@ -121,6 +125,10 @@ export interface InputFormState {
   crowdPreference: 'crowded' | 'relatively_niche' | 'super_niche';
   startDate?: string;
   endDate?: string;
+  /** Total hours available for the itinerary */
+  timeAvailableHours?: number;
+  /** Preferred start time (HH:MM format) */
+  startTime?: string;
 }
 
 export type AgentStatus = 'waiting' | 'processing' | 'success' | 'error';

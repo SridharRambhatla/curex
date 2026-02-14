@@ -28,10 +28,11 @@ import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import {
   DiscoveryCard,
+  DiscoveryCardSkeleton,
   CategoryTabs,
   WeatherWidget,
 } from '@/components/discovery';
-import { SAMPLE_EXPERIENCES } from '@/lib/sample-data';
+import { useExperiences } from '@/hooks/useExperiences';
 
 // Quick filter options for explore section
 const quickFilters = [
@@ -51,9 +52,22 @@ export default function HomePage() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [activeQuickFilters, setActiveQuickFilters] = useState<string[]>([]);
 
+  // Fetch experiences from API with auto-refresh
+  const {
+    experiences: allExperiences,
+    isLoading,
+    isFallback,
+    refetch,
+  } = useExperiences({
+    fetchOnMount: true,
+    useFallback: true,
+    autoRefresh: true,
+    refreshInterval: 60 * 1000, // Refresh every 60 seconds on home page
+  });
+
   // Filter experiences for explore section
   const filteredExperiences = useMemo(() => {
-    let results = [...SAMPLE_EXPERIENCES];
+    let results = [...allExperiences];
 
     // Category filter
     if (selectedCategory !== 'all') {
@@ -79,7 +93,7 @@ export default function HomePage() {
     });
 
     return results;
-  }, [selectedCategory, searchQuery, activeQuickFilters]);
+  }, [allExperiences, selectedCategory, searchQuery, activeQuickFilters]);
 
   const toggleQuickFilter = useCallback((id: string) => {
     setActiveQuickFilters((prev) =>
@@ -330,12 +344,26 @@ export default function HomePage() {
         </div>
 
         {/* Results count */}
-        <p className="text-sm text-muted-foreground mb-4">
-          {filteredExperiences.length} experience{filteredExperiences.length !== 1 ? 's' : ''}
-        </p>
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm text-muted-foreground">
+            {isLoading 
+              ? 'Discovering experiences...' 
+              : `${filteredExperiences.length} experience${filteredExperiences.length !== 1 ? 's' : ''}`
+            }
+            {isFallback && !isLoading && (
+              <span className="ml-2 text-xs text-amber-600">(cached)</span>
+            )}
+          </p>
+        </div>
 
         {/* Experience Grid */}
-        {filteredExperiences.length > 0 ? (
+        {isLoading ? (
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <DiscoveryCardSkeleton key={i} />
+            ))}
+          </div>
+        ) : filteredExperiences.length > 0 ? (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {filteredExperiences.map((experience) => (
               <DiscoveryCard

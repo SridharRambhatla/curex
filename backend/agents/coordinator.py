@@ -33,6 +33,8 @@ def _create_initial_state(request: ItineraryRequest) -> AgentState:
         crowd_preference=request.crowd_preference,
         start_date=request.start_date or "",
         end_date=request.end_date or "",
+        time_available_hours=request.time_available_hours or 8.0,  # Default to 8 hours
+        start_time=request.start_time or "10:00",  # Default to 10 AM
         # Agent outputs (initialized empty)
         discovered_experiences=[],
         cultural_context={},

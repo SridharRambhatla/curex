@@ -62,6 +62,14 @@ class ItineraryRequest(BaseModel):
         default=None,
         description="Trip end date (YYYY-MM-DD)",
     )
+    time_available_hours: Optional[float] = Field(
+        default=None,
+        description="Total hours available for the itinerary (e.g., 4, 6, 8). If not specified, defaults to a full day.",
+    )
+    start_time: Optional[str] = Field(
+        default=None,
+        description="Preferred start time (HH:MM format, e.g., '14:00' for 2 PM)",
+    )
 
 
 class ExperienceItem(BaseModel):
@@ -205,10 +213,14 @@ class DiscoverRequest(BaseModel):
         description="Only return solo-friendly experiences"
     )
     limit: int = Field(
-        default=12,
+        default=25,
         ge=1,
         le=50,
         description="Maximum number of experiences to return"
+    )
+    fast_mode: bool = Field(
+        default=False,
+        description="If true, return curated data only (instant). If false, combine curated + agent-generated."
     )
 
 
@@ -218,6 +230,9 @@ class DiscoverResponse(BaseModel):
     experiences: list[DiscoveryExperienceResponse]
     total_count: int
     filters_applied: dict[str, Any] = Field(default_factory=dict)
+    curated_count: int = Field(default=0, description="Number of curated experiences in response")
+    agent_count: int = Field(default=0, description="Number of agent-generated experiences in response")
+    source: str = Field(default="curated", description="Source: 'curated', 'agent', or 'hybrid'")
 
 
 class ItineraryResponse(BaseModel):
@@ -268,6 +283,8 @@ class AgentState(TypedDict):
     crowd_preference: str
     start_date: str
     end_date: str
+    time_available_hours: float  # Hours available for the itinerary
+    start_time: str  # Preferred start time (HH:MM format)
 
     # Agent outputs
     discovered_experiences: list[dict[str, Any]]

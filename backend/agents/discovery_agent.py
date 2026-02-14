@@ -237,22 +237,44 @@ DISCOVERY_SYSTEM_PROMPT = """You are the Discovery Agent for Sidequest, a plot-f
 
 Your role is to find compelling, unique experiences based on the user's query and preferences.
 
-Given the user's input, discover and return 5-10 relevant experiences. Focus on:
-1. Hyperlocal gems not easily found on Google Maps (look for specific artisan names, hidden cafes, specific workshops).
-2. Artisan workshops, heritage walks, cultural immersions.
-3. Solo-friendly activities with social scaffolding potential.
-4. Experiences with story potential (lore, provenance, friction).
+Given the user's input, discover and return 10-15 relevant experiences. Focus on:
+1. UNIQUE, LESSER-KNOWN GEMS that are NOT commonly featured on mainstream travel sites
+2. Hyperlocal spots not easily found on Google Maps (specific artisan names, hidden cafes, specific workshops)
+3. Artisan workshops, heritage walks, cultural immersions
+4. Solo-friendly activities with social scaffolding potential
+5. Experiences with story potential (lore, provenance, friction)
+
+IMPORTANT: Avoid these well-known/commonly curated Bangalore spots (we already have them):
+- CTR Malleshwaram, Vidyarthi Bhavan, Brahmin's Coffee Bar, MTR, Airlines Hotel
+- Toit Brewery, The Humming Tree
+- Cubbon Park Run Club, Lalbagh, Nandi Hills, Sankey Tank
+- Bangalore Palace, Bull Temple, National Gallery of Modern Art
+- Commercial Street, Clay Station
+
+Instead, discover HIDDEN GEMS like:
+- Neighborhood-specific darshinis and thindi streets
+- Lesser-known artisan workshops (not the famous ones)
+- Secret rooftops, basement bars, speakeasy-style venues
+- Community-run cultural events
+- Emerging neighborhoods with unique character
+- Time-specific events (monthly markets, seasonal festivals)
 
 CRITICAL: If a specific date or day is mentioned, ONLY return experiences that are ACTUALLY OPEN/AVAILABLE on that day.
 - Check if the experience operates on the requested day of the week
 - Consider if it's a weekend-only, weekday-only, or specific-day experience
 - Do NOT include experiences that are closed on the requested date
 
+CRITICAL: If a duration constraint is mentioned, respect the user's available time.
+- Prioritize experiences that fit within the time window
+- For limited time, quality over quantity — fewer, deeper experiences are better
+- Consider travel time between experiences (15-30 mins in city traffic)
+
 For each experience, provide:
-- name: Experience name
+- name: Experience name (be specific - include venue name if applicable)
 - category: One of [food, craft, heritage, nature, art, music, fitness, shopping, networking]
 - timing: Best time to visit (e.g., "Saturday 7 AM for fresh flowers")
 - time_of_day: One of [morning, afternoon, evening, night, flexible] - when this experience is best enjoyed
+- duration_hours: Estimated time to fully enjoy this experience (e.g., 1.5, 2, 3). Be realistic.
 - operating_days: Array of days when open, e.g., ["monday", "tuesday", "wednesday", "thursday", "friday"] or ["saturday", "sunday"] or ["daily"]
 - operating_hours: String describing hours, e.g., "10 AM - 6 PM" or "7 AM - 12 PM, 4 PM - 9 PM"
 - budget: Estimated cost in INR (Integer only)
@@ -303,6 +325,8 @@ def run_discovery_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     city = state.get("city", "Bangalore") # Default to Bangalore as per MVP
     budget_range = state.get("budget_range", "500-2000")
     interest_pods = state.get("interest_pods", [])
+    time_available_hours = state.get("time_available_hours", 8.0)  # Default to 8 hours
+    start_time = state.get("start_time", "10:00")
     
     # Parse time constraints from user query
     time_of_day, time_constraint = parse_time_from_query(user_query)
@@ -361,10 +385,23 @@ def run_discovery_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         # Add today's date for reference
         date_context += f"\n(Today is {datetime.now().strftime('%A, %B %d, %Y')})"
     
+    # Add duration constraint based on available time
+    duration_context = ""
+    if time_available_hours and time_available_hours < 8:
+        # For limited time windows, prioritize shorter experiences
+        max_single_exp_hours = min(time_available_hours / 2, 3)  # No single experience > half the total or 3 hours
+        duration_context = f"""
+
+DURATION CONSTRAINT: User has only {time_available_hours} hours available (starting at {start_time}).
+- Prioritize experiences that take {max_single_exp_hours:.1f} hours or less each
+- Total experiences should fit within {time_available_hours} hours including travel time (15-30 min between stops)
+- For limited time, recommend 2-4 quality experiences rather than 5-10 rushed ones
+- Include estimated duration for each experience in the response"""
+    
     user_prompt = f"""
     User Request: {user_query}
     Target City: {city}
-    Budget Range: ₹{budget_range}{interest_context}{time_context}{date_context}
+    Budget Range: ₹{budget_range}{interest_context}{time_context}{date_context}{duration_context}
     
     Find specific, actionable experiences that fit the 'Sidequest' vibe (Plot-first, meaningful, local).
     """

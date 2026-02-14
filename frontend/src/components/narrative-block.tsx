@@ -39,7 +39,17 @@ export function NarrativeBlock({
   onMapFocus,
   className,
 }: NarrativeBlockProps) {
-  const [showDetails, setShowDetails] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Toggle expansion when clicking on the card content area
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Don't toggle if clicking on buttons or interactive elements
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('a')) {
+      return;
+    }
+    setIsExpanded(!isExpanded);
+  };
 
   return (
     <div className={cn('relative', className)}>
@@ -58,16 +68,37 @@ export function NarrativeBlock({
           <div className="w-0.5 h-full bg-border mx-auto mt-2" />
         </div>
 
-        {/* Content */}
-        <div className="flex-grow pb-8">
-          {/* Time badge */}
-          <Badge 
-            variant="outline" 
-            className="mb-3 bg-background border-primary/30 text-primary"
-          >
-            <Clock className="h-3 w-3 mr-1" />
-            {experience.timing}
-          </Badge>
+        {/* Content - clickable to expand */}
+        <div 
+          className={cn(
+            "flex-grow pb-8 cursor-pointer rounded-lg transition-all duration-300",
+            isExpanded && "bg-muted/30 -mx-3 px-3 py-3"
+          )}
+          onClick={handleCardClick}
+        >
+          {/* Header row with time and expand indicator */}
+          <div className="flex items-center justify-between mb-3">
+            <Badge 
+              variant="outline" 
+              className="bg-background border-primary/30 text-primary"
+            >
+              <Clock className="h-3 w-3 mr-1" />
+              {experience.timing}
+            </Badge>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              {isExpanded ? (
+                <>
+                  <span>Click to collapse</span>
+                  <ChevronUp className="h-3 w-3" />
+                </>
+              ) : (
+                <>
+                  <span>Click for details</span>
+                  <ChevronDown className="h-3 w-3" />
+                </>
+              )}
+            </div>
+          </div>
 
           {/* Experience title */}
           <h3 className="text-xl font-semibold mb-2 group">
@@ -76,7 +107,10 @@ export function NarrativeBlock({
               variant="ghost"
               size="sm"
               className="ml-2 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={onMapFocus}
+              onClick={(e) => {
+                e.stopPropagation();
+                onMapFocus?.();
+              }}
             >
               <MapPin className="h-4 w-4" />
             </Button>
@@ -88,18 +122,27 @@ export function NarrativeBlock({
             <span>{experience.location}</span>
           </div>
 
-          {/* Narrative text / Lore */}
+          {/* Narrative text / Lore - truncated when collapsed */}
           <div className="prose prose-sm dark:prose-invert max-w-none mb-4">
             {narrativeText ? (
-              <p className="text-foreground leading-relaxed">
+              <p className={cn(
+                "text-foreground leading-relaxed transition-all duration-300",
+                !isExpanded && "line-clamp-3"
+              )}>
                 {narrativeText}
               </p>
             ) : experience.lore ? (
-              <p className="text-foreground leading-relaxed">
+              <p className={cn(
+                "text-foreground leading-relaxed transition-all duration-300",
+                !isExpanded && "line-clamp-3"
+              )}>
                 {experience.lore}
               </p>
             ) : experience.description && (
-              <p className="text-foreground leading-relaxed">
+              <p className={cn(
+                "text-foreground leading-relaxed transition-all duration-300",
+                !isExpanded && "line-clamp-3"
+              )}>
                 {experience.description}
               </p>
             )}
@@ -132,97 +175,114 @@ export function NarrativeBlock({
             </Badge>
           </div>
 
-          {/* Expandable cultural context */}
-          {(culturalContext || socialScaffolding) && (
-            <div className="mt-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground hover:text-foreground -ml-2"
-                onClick={() => setShowDetails(!showDetails)}
-              >
-                <Info className="h-4 w-4 mr-2" />
-                {showDetails ? 'Hide' : 'Show'} local tips
-                {showDetails ? (
-                  <ChevronUp className="h-4 w-4 ml-1" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 ml-1" />
+          {/* Expanded details section */}
+          {isExpanded && (culturalContext || socialScaffolding) && (
+            <Card className="mt-4 bg-muted/50 border-muted animate-fade-in">
+              <CardContent className="p-4 space-y-3">
+                {/* Full description if not shown in narrative */}
+                {!narrativeText && experience.description && experience.lore && (
+                  <>
+                    <div className="flex gap-3">
+                      <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium">About</p>
+                        <p className="text-sm text-muted-foreground">{experience.description}</p>
+                      </div>
+                    </div>
+                    <Separator className="my-2" />
+                  </>
                 )}
-              </Button>
 
-              {showDetails && (
-                <Card className="mt-3 bg-muted/50 border-muted animate-fade-in">
-                  <CardContent className="p-4 space-y-3">
-                    {/* Cultural context */}
-                    {culturalContext && (
-                      <>
-                        {culturalContext.timing && (
-                          <div className="flex gap-3">
-                            <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                            <div>
-                              <p className="text-sm font-medium">Best Time</p>
-                              <p className="text-sm text-muted-foreground">{culturalContext.timing}</p>
-                            </div>
-                          </div>
-                        )}
-                        {culturalContext.dress && (
-                          <div className="flex gap-3">
-                            <Sparkles className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                            <div>
-                              <p className="text-sm font-medium">Dress Code</p>
-                              <p className="text-sm text-muted-foreground">{culturalContext.dress}</p>
-                            </div>
-                          </div>
-                        )}
-                        {culturalContext.transport && (
-                          <div className="flex gap-3">
-                            <Navigation className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                            <div>
-                              <p className="text-sm font-medium">Getting There</p>
-                              <p className="text-sm text-muted-foreground">{culturalContext.transport}</p>
-                            </div>
-                          </div>
-                        )}
-                      </>
+                {/* Cultural context */}
+                {culturalContext && (
+                  <>
+                    {culturalContext.timing && (
+                      <div className="flex gap-3">
+                        <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium">Best Time</p>
+                          <p className="text-sm text-muted-foreground">{culturalContext.timing}</p>
+                        </div>
+                      </div>
                     )}
+                    {culturalContext.dress && (
+                      <div className="flex gap-3">
+                        <Sparkles className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium">Dress Code</p>
+                          <p className="text-sm text-muted-foreground">{culturalContext.dress}</p>
+                        </div>
+                      </div>
+                    )}
+                    {culturalContext.transport && (
+                      <div className="flex gap-3">
+                        <Navigation className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium">Getting There</p>
+                          <p className="text-sm text-muted-foreground">{culturalContext.transport}</p>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
 
-                    {/* Social scaffolding */}
-                    {socialScaffolding && (
-                      <>
-                        <Separator className="my-2" />
-                        {socialScaffolding.scaffolding && (
-                          <div className="flex gap-3">
-                            <UserCheck className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                            <div>
-                              <p className="text-sm font-medium">Social Vibe</p>
-                              <p className="text-sm text-muted-foreground">{socialScaffolding.scaffolding}</p>
-                            </div>
-                          </div>
-                        )}
-                        {socialScaffolding.arrival_vibe && (
-                          <p className="text-sm text-muted-foreground italic pl-7">
-                            &ldquo;{socialScaffolding.arrival_vibe}&rdquo;
-                          </p>
-                        )}
-                      </>
+                {/* Social scaffolding */}
+                {socialScaffolding && (
+                  <>
+                    {culturalContext && <Separator className="my-2" />}
+                    {socialScaffolding.scaffolding && (
+                      <div className="flex gap-3">
+                        <UserCheck className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium">Social Vibe</p>
+                          <p className="text-sm text-muted-foreground">{socialScaffolding.scaffolding}</p>
+                        </div>
+                      </div>
                     )}
-                  </CardContent>
-                </Card>
-              )}
-            </div>
+                    {socialScaffolding.arrival_vibe && (
+                      <p className="text-sm text-muted-foreground italic pl-7">
+                        &ldquo;{socialScaffolding.arrival_vibe}&rdquo;
+                      </p>
+                    )}
+                    {socialScaffolding.beginner_energy && (
+                      <div className="flex gap-3">
+                        <Sparkles className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium">Beginner Friendly</p>
+                          <p className="text-sm text-muted-foreground">{socialScaffolding.beginner_energy}</p>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
           )}
 
-          {/* Action buttons */}
-          <div className="flex flex-wrap gap-2 mt-4">
-            <Button variant="outline" size="sm">
-              <Calendar className="h-4 w-4 mr-2" />
-              Add to Calendar
-            </Button>
-            <Button variant="outline" size="sm" onClick={onMapFocus}>
-              <Navigation className="h-4 w-4 mr-2" />
-              Get Directions
-            </Button>
-          </div>
+          {/* Action buttons - only show when expanded */}
+          {isExpanded && (
+            <div className="flex flex-wrap gap-2 mt-4 animate-fade-in">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Calendar className="h-4 w-4 mr-2" />
+                Add to Calendar
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMapFocus?.();
+                }}
+              >
+                <Navigation className="h-4 w-4 mr-2" />
+                Get Directions
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>

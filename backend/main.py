@@ -33,6 +33,7 @@ from state.schemas import (
 from agents.coordinator import run_workflow
 from logging_system import start_global_logger, stop_global_logger, get_log_config
 from agents.discovery_agent import run_discovery_agent
+from data.curated_experiences import get_curated_experiences, CURATED_EXPERIENCES
 
 
 @asynccontextmanager
@@ -252,16 +253,100 @@ def transform_to_discovery_experience(
     )
 
 
+def curated_to_response(exp: dict) -> DiscoveryExperienceResponse:
+    """Convert a curated experience dict to DiscoveryExperienceResponse."""
+    return DiscoveryExperienceResponse(
+        id=exp["id"],
+        name=exp["name"],
+        category=exp["category"],
+        description_short=exp["description_short"],
+        image_url=exp["image_url"],
+        location=ExperienceLocation(
+            neighborhood=exp["location"]["neighborhood"],
+            coordinates=Coordinates(
+                lat=exp["location"]["coordinates"]["lat"],
+                lng=exp["location"]["coordinates"]["lng"]
+            )
+        ),
+        timing=ExperienceTiming(
+            type=exp["timing"]["type"],
+            duration_hours=exp["timing"]["duration_hours"],
+            advance_booking_required=exp["timing"]["advance_booking_required"],
+            advance_days_minimum=exp["timing"].get("advance_days_minimum")
+        ),
+        operating_days=exp.get("operating_days", ["daily"]),
+        operating_hours=exp.get("operating_hours"),
+        budget=ExperienceBudget(
+            min=exp["budget"]["min"],
+            max=exp["budget"]["max"],
+            currency=exp["budget"]["currency"]
+        ),
+        solo_friendly=SoloFriendly(
+            is_solo_sure=exp["solo_friendly"]["is_solo_sure"],
+            confidence_score=exp["solo_friendly"]["confidence_score"]
+        ),
+        crowd_level=CrowdLevel(
+            current=exp["crowd_level"]["current"],
+            updated_at=datetime.now().isoformat()
+        ),
+        weather_suitability=WeatherSuitability(
+            indoor=exp["weather_suitability"]["indoor"],
+            outdoor=exp["weather_suitability"]["outdoor"],
+            current_match=exp["weather_suitability"]["current_match"]
+        ),
+        availability=Availability(
+            status=exp["availability"]["status"],
+            urgency_level=exp["availability"]["urgency_level"]
+        ),
+        rating=exp.get("rating"),
+        review_count=exp.get("review_count"),
+        bookmarked=exp.get("bookmarked", False)
+    )
+
+
 @app.post("/api/discover", response_model=DiscoverResponse)
 async def discover_experiences(request: DiscoverRequest):
     """
     Discover experiences for the explore page.
     
-    This endpoint runs the Discovery Agent to find experiences based on
-    optional filters. Returns experiences in the format expected by the
-    frontend DiscoveryCard component.
+    Supports two modes:
+    - fast_mode=True: Returns curated experiences instantly (~25 pre-loaded)
+    - fast_mode=False: Combines curated + agent-generated for richer results
+    
+    This enables progressive loading: show curated first, then enrich with agent.
     """
     try:
+        # Get curated experiences (instant)
+        curated_raw = get_curated_experiences(
+            city=request.city,
+            categories=request.categories if request.categories else None,
+            budget_min=request.budget_min,
+            budget_max=request.budget_max,
+            solo_friendly_only=request.solo_friendly_only,
+            limit=request.limit
+        )
+        
+        curated_experiences = [curated_to_response(exp) for exp in curated_raw]
+        
+        # Fast mode: return curated only
+        if request.fast_mode:
+            return DiscoverResponse(
+                experiences=curated_experiences[:request.limit],
+                total_count=len(curated_experiences),
+                filters_applied={
+                    "query": request.query,
+                    "city": request.city,
+                    "categories": request.categories,
+                    "budget_range": [request.budget_min, request.budget_max],
+                    "time_of_day": request.time_of_day,
+                    "solo_friendly_only": request.solo_friendly_only,
+                },
+                curated_count=len(curated_experiences),
+                agent_count=0,
+                source="curated"
+            )
+        
+        # Full mode: curated + agent-generated
         # Build query from request parameters
         query_parts = []
         
@@ -285,7 +370,7 @@ async def discover_experiences(request: DiscoverRequest):
             "user_query": user_query,
             "city": request.city,
             "budget_range": f"{request.budget_min}-{request.budget_max}",
-            "interest_pods": [],  # Could map categories to pods
+            "interest_pods": [],
         }
         
         # Run discovery agent (in thread pool to avoid blocking)
@@ -296,24 +381,31 @@ async def discover_experiences(request: DiscoverRequest):
             agent_state
         )
         
-        # Transform results
+        # Transform agent results
         raw_experiences = result.get("discovered_experiences", [])
         
-        experiences = [
-            transform_to_discovery_experience(exp, idx)
-            for idx, exp in enumerate(raw_experiences[:request.limit])
+        agent_experiences = [
+            transform_to_discovery_experience(exp, idx + 100)  # Offset ID to avoid collisions
+            for idx, exp in enumerate(raw_experiences[:15])  # Get up to 15 from agent
         ]
         
-        # Apply post-filters
+        # Apply post-filters to agent results
         if request.solo_friendly_only:
-            experiences = [e for e in experiences if e.solo_friendly.is_solo_sure]
+            agent_experiences = [e for e in agent_experiences if e.solo_friendly.is_solo_sure]
         
         if request.categories:
-            experiences = [e for e in experiences if e.category in request.categories]
+            agent_experiences = [e for e in agent_experiences if e.category in request.categories]
+        
+        # Merge: curated first, then agent (deduplicate by name)
+        curated_names = {exp.name.lower() for exp in curated_experiences}
+        unique_agent = [exp for exp in agent_experiences if exp.name.lower() not in curated_names]
+        
+        combined = curated_experiences + unique_agent
+        combined = combined[:request.limit]
         
         return DiscoverResponse(
-            experiences=experiences,
-            total_count=len(experiences),
+            experiences=combined,
+            total_count=len(combined),
             filters_applied={
                 "query": request.query,
                 "city": request.city,
@@ -321,13 +413,31 @@ async def discover_experiences(request: DiscoverRequest):
                 "budget_range": [request.budget_min, request.budget_max],
                 "time_of_day": request.time_of_day,
                 "solo_friendly_only": request.solo_friendly_only,
-            }
+            },
+            curated_count=len(curated_experiences),
+            agent_count=len(unique_agent),
+            source="hybrid"
         )
         
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Discovery failed: {str(e)}"
+        # Fallback to curated on error
+        curated_raw = get_curated_experiences(
+            city=request.city,
+            limit=request.limit
+        )
+        curated_experiences = [curated_to_response(exp) for exp in curated_raw]
+        
+        return DiscoverResponse(
+            experiences=curated_experiences,
+            total_count=len(curated_experiences),
+            filters_applied={
+                "query": request.query,
+                "city": request.city,
+                "error": str(e)
+            },
+            curated_count=len(curated_experiences),
+            agent_count=0,
+            source="curated"
         )
 
 
